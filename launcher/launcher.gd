@@ -467,10 +467,10 @@ func _continue_card(id: String) -> void:
     info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     info.add_child(_lbl(g.name, 22, TEXT))
     info.add_child(_lbl("%s  •  %s" % [", ".join(g.genre), ", ".join(g.modes)], 13, DIM))
-    var play := _btn("PLAY", play.bind(id), true)
-    play.custom_minimum_size = Vector2(150, 48)
-    row.add_child(info)
-    row.add_child(play)
+    var play_button := _btn("PLAY", play.bind(id), true)
+play_button.custom_minimum_size = Vector2(150, 48)
+row.add_child(info)
+row.add_child(play_button)
 
 func _library() -> void:
     _section_title("LIBRARY", "%d project%s available." % [games.size(), "" if games.size() == 1 else "s"])
