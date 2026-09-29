@@ -26,12 +26,19 @@ jobs:
       - name: Godot editor settings
         run: |
           mkdir -p ~/.config/godot
-          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\n' "$JAVA_HOME" "$ANDROID_HOME" > ~/.config/godot/editor_settings-4.tres
+          for v in 4 4.3; do
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$JAVA_HOME" "$ANDROID_HOME" "$GITHUB_WORKSPACE/debug.keystore" > ~/.config/godot/editor_settings-$v.tres
+          done
+          ls ~/.config/godot
       - name: Import project
         run: godot --headless --path . --import || true
       - name: Export APK
-        run: mkdir -p build && godot --headless --path . --export-debug "Android" build/project-zero.apk
+        run: |
+          set -o pipefail
+          mkdir -p build
+          godot --headless --verbose --path . --export-debug "Android" build/project-zero.apk 2>&1 | tail -80
       - uses: actions/upload-artifact@v4
         with:
           name: project-zero-debug-apk
           path: build/project-zero.apk
+          
