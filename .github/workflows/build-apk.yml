@@ -3,36 +3,36 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+
+env:
+  ANDROID_HOME: /usr/local/lib/android/sdk
+  GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/debug.keystore
+  GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
+  GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      GODOT_ANDROID_KEYSTORE_DEBUG_PATH: ${{ github.workspace }}/debug.keystore
-      GODOT_ANDROID_KEYSTORE_DEBUG_USER: androiddebugkey
-      GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: android
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: 17}
+
+      - name: Android SDK (platform, build-tools, ndk, cmake)
+        run: |
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-34" "cmake;3.10.2.4988404" "ndk;23.2.8568313" > /dev/null
+
       - uses: chickensoft-games/setup-godot@v2
         with:
           version: 4.3.0
           use-dotnet: false
           include-templates: true
-      - name: Android SDK components
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "build-tools;34.0.0" "platforms;android-34" "cmake;3.10.2.4988404" "ndk;23.2.8568313" > /dev/null
-      - name: Debug keystore
-        run: keytool -genkeypair -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 9999 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" -deststoretype pkcs12
-      - name: Godot editor settings
-        run: |
-          mkdir -p ~/.config/godot
-          for v in 4 4.3; do
-            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$JAVA_HOME" "$ANDROID_HOME" "$GITHUB_WORKSPACE/debug.keystore" > ~/.config/godot/editor_settings-$v.tres
-          done
-          ls ~/.config/godot
+
       - name: Ensure export templates
         run: |
-          T=~/.local/share/godot/export_templates/4.3.stable
+          T="$HOME/.local/share/godot/export_templates/4.3.stable"
           if [ ! -f "$T/android_debug.apk" ]; then
             mkdir -p "$T"
             curl -sL -o t.tpz https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
@@ -40,21 +40,54 @@ jobs:
             cp -r tpl/templates/* "$T/"
           fi
           ls "$T" | head -30
+
+      - name: Debug keystore
+        run: keytool -genkeypair -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 9999 -storepass android -keypass android -dname "CN=Android Debug,O=Android,C=US" -deststoretype pkcs12
+
+      - name: Godot editor settings (Java + SDK + keystore)
+        run: |
+          mkdir -p ~/.config/godot
+          for v in 4 4.3; do
+            printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$JAVA_HOME" "$ANDROID_HOME" "$GITHUB_WORKSPACE/debug.keystore" > ~/.config/godot/editor_settings-$v.tres
+          done
+
+      - name: Ensure Android project settings (ETC2/ASTC + mobile renderer)
+        run: |
+          grep -q 'import_etc2_astc=true' project.godot || printf '\n[rendering]\n\nrenderer/rendering_method="mobile"\ntextures/vram_compression/import_etc2_astc=true\n' >> project.godot
+
+      - name: Validate export config
+        run: |
+          fail=0
+          ck() { if [ "$1" = ok ]; then echo "ok:   $2"; else echo "FAIL: $2"; fail=1; fi; }
+          grep -q 'platform="Android"' export_presets.cfg && ck ok "preset Android" || ck no "preset Android missing"
+          grep -q 'package/unique_name="[A-Za-z][A-Za-z0-9_]*\(\.[A-Za-z][A-Za-z0-9_]*\)\+"' export_presets.cfg && ck ok "package/unique_name" || ck no "package/unique_name invalid"
+          grep -q 'architectures/arm64-v8a=true' export_presets.cfg && ck ok "arch arm64" || ck no "no architecture enabled"
+          grep -q 'import_etc2_astc=true' project.godot && ck ok "ETC2/ASTC enabled" || ck no "ETC2/ASTC not enabled"
+          for f in icon.png icon_192.png icon_fg_432.png icon_bg_432.png debug.keystore; do [ -f "$f" ] && ck ok "file $f" || ck no "missing file $f"; done
+          [ -x "$ANDROID_HOME/build-tools/34.0.0/apksigner" ] && ck ok "build-tools 34.0.0" || ck no "build-tools 34.0.0 missing"
+          [ -d "$ANDROID_HOME/platforms/android-34" ] && ck ok "platform android-34" || ck no "platform android-34 missing"
+          [ -x "$ANDROID_HOME/platform-tools/adb" ] && ck ok "platform-tools" || ck no "platform-tools missing"
+          [ -f "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ] && ck ok "cmdline-tools" || ck no "cmdline-tools missing"
+          [ -f "$HOME/.local/share/godot/export_templates/4.3.stable/android_debug.apk" ] && ck ok "export template android_debug.apk" || ck no "export template missing"
+          java -version 2>&1 | grep -q '"17\.' && ck ok "Java 17" || ck no "Java is not 17"
+          [ "$fail" = 0 ] || exit 1
+
       - name: Import project
         run: godot --headless --path . --import || true
+
       - name: Export APK
         run: |
           set -o pipefail
           mkdir -p build
-          godot --headless --verbose --path . --export-debug "Android" build/project-zero.apk 2>&1 | tail -80
+          godot --headless --verbose --path . --export-debug "Android" build/project-zero.apk 2>&1 | tail -60
+
       - name: Diagnostics
         if: failure()
         run: |
-          echo "JAVA_HOME=$JAVA_HOME ANDROID_HOME=$ANDROID_HOME"
-          ls $ANDROID_HOME/build-tools $ANDROID_HOME/platforms $ANDROID_HOME/ndk $ANDROID_HOME/cmdline-tools || true
           grep android ~/.config/godot/editor_settings-4.3.tres || true
-          ls ~/.local/share/godot/export_templates/* | head -20
           cat export_presets.cfg
+          cat project.godot
+
       - uses: actions/upload-artifact@v4
         with:
           name: project-zero-debug-apk
