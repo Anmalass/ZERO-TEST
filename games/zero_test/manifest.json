@@ -1,0 +1,4 @@
+{"id":"zero_test","name":"Zero Test","version":"0.1.0","status":"playable","genre":["3D","Prototype"],"modes":["singleplayer"],
+"about":"Small 3D vertical slice: move, collect 10 coins, return to launcher.",
+"entry":"res://games/zero_test/zero_test.tscn","minimum_version":"1.0.0",
+"assets":[{"path":"res://games/zero_test/player.gd","priority":1},{"path":"res://games/zero_test/coin.gd","priority":2},{"path":"res://games/zero_test/decor.gd","priority":3}]}
