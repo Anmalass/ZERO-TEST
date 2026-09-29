@@ -30,6 +30,16 @@ jobs:
             printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/java_sdk_path = "%s"\nexport/android/android_sdk_path = "%s"\nexport/android/debug_keystore = "%s"\nexport/android/debug_keystore_user = "androiddebugkey"\nexport/android/debug_keystore_pass = "android"\n' "$JAVA_HOME" "$ANDROID_HOME" "$GITHUB_WORKSPACE/debug.keystore" > ~/.config/godot/editor_settings-$v.tres
           done
           ls ~/.config/godot
+      - name: Ensure export templates
+        run: |
+          T=~/.local/share/godot/export_templates/4.3.stable
+          if [ ! -f "$T/android_debug.apk" ]; then
+            mkdir -p "$T"
+            curl -sL -o t.tpz https://github.com/godotengine/godot/releases/download/4.3-stable/Godot_v4.3-stable_export_templates.tpz
+            unzip -q t.tpz -d tpl
+            cp -r tpl/templates/* "$T/"
+          fi
+          ls "$T" | head -30
       - name: Import project
         run: godot --headless --path . --import || true
       - name: Export APK
@@ -37,6 +47,14 @@ jobs:
           set -o pipefail
           mkdir -p build
           godot --headless --verbose --path . --export-debug "Android" build/project-zero.apk 2>&1 | tail -80
+      - name: Diagnostics
+        if: failure()
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME ANDROID_HOME=$ANDROID_HOME"
+          ls $ANDROID_HOME/build-tools $ANDROID_HOME/platforms $ANDROID_HOME/ndk $ANDROID_HOME/cmdline-tools || true
+          grep android ~/.config/godot/editor_settings-4.3.tres || true
+          ls ~/.local/share/godot/export_templates/* | head -20
+          cat export_presets.cfg
       - uses: actions/upload-artifact@v4
         with:
           name: project-zero-debug-apk
