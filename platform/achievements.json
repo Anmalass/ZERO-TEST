@@ -1,0 +1,5 @@
+[
+{"id":"first_launch","name":"First Launch","description":"Open Project Zero.","rarity":"common","xp":10},
+{"id":"first_game","name":"First Game","description":"Play your first game.","rarity":"common","xp":20},
+{"id":"coin_collector","name":"Coin Collector","description":"Collect all coins in Zero Test.","rarity":"rare","xp":50}
+]
